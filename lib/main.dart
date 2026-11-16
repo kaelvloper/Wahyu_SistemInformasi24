@@ -35,6 +35,10 @@ class _InventarisPageState extends State<InventarisPage> {
     const Barang(kode: 'BRG002', nama: 'Keyboard', stok: 3),
   ];
 
+  // Controller dan variabel pencarian (Tugas Anggota 5)
+  final TextEditingController _searchController = TextEditingController();
+  String _kataKunci = '';
+
   bool _loading = true;
   final SharedPreferencesAsync _prefs = SharedPreferencesAsync();
   static const String _key = 'inventaris_v1';
@@ -43,6 +47,12 @@ class _InventarisPageState extends State<InventarisPage> {
   void initState() {
     super.initState();
     _muat();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _muat() async {
@@ -58,9 +68,11 @@ class _InventarisPageState extends State<InventarisPage> {
         });
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal memuat data: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal memuat data: $e')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -71,9 +83,11 @@ class _InventarisPageState extends State<InventarisPage> {
     try {
       await _prefs.setString(_key, data);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal menyimpan data: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menyimpan data: $e')),
+        );
+      }
     }
   }
 
@@ -118,24 +132,118 @@ class _InventarisPageState extends State<InventarisPage> {
     await _simpan();
   }
 
+  void _resetPencarian() {
+    _searchController.clear();
+    setState(() => _kataKunci = '');
+  }
+
   @override
   Widget build(BuildContext context) {
+    final query = _kataKunci.trim().toLowerCase();
+    final List<Barang> barangTampil = query.isEmpty
+        ? _barang
+        : _barang.where((b) {
+            return b.nama.toLowerCase().contains(query) ||
+                b.kode.toLowerCase().contains(query);
+          }).toList();
+
     return Scaffold(
       appBar: AppBar(title: const Text('Inventaris Laboratorium')),
-      body: _loading ? const Center(child: CircularProgressIndicator()) : ListView.builder(
-          itemCount: _barang.length,
-          itemBuilder: (context, i) {
-            final b = _barang[i];
-            return Card(child: ListTile(
-              title: Text(b.nama),
-              subtitle: Text('${b.kode} • Stok: ${b.stok}'),
-              trailing: Row(mainAxisSize: MainAxisSize.min, children: [IconButton(tooltip: 'Edit', onPressed: () => _ubah(b), icon: const Icon(Icons.edit)),
-IconButton(tooltip: 'Hapus', onPressed: () => _hapus(b), icon: const Icon(Icons.delete)),
-]),
-            ));
-          },
-        ),
-      floatingActionButton: FloatingActionButton(onPressed: _tambah, child: const Icon(Icons.add)),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Area SearchBar (Anggota 5)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: SearchBar(
+                    controller: _searchController,
+                    constraints: const BoxConstraints(minHeight: 48),
+                    elevation: const WidgetStatePropertyAll(1),
+                    hintText: 'Cari nama atau kode perangkat (misal: Mouse, BRG001)...',
+                    leading: const Icon(Icons.search),
+                    trailing: [
+                      if (_kataKunci.isNotEmpty)
+                        IconButton(
+                          tooltip: 'Hapus pencarian',
+                          icon: const Icon(Icons.clear),
+                          onPressed: _resetPencarian,
+                        ),
+                    ],
+                    onChanged: (value) {
+                      setState(() => _kataKunci = value);
+                    },
+                  ),
+                ),
+
+                // Indikator jumlah hasil pencarian saat user mengetik
+                if (query.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    child: Text(
+                      'Menampilkan ${barangTampil.length} dari ${_barang.length} barang',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+
+                // Daftar barang atau tampilan kosong saat tidak ditemukan
+                Expanded(
+                  child: barangTampil.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.search_off, size: 48, color: Colors.grey),
+                              const SizedBox(height: 8),
+                              Text('Barang "$_kataKunci" tidak ditemukan'),
+                              if (query.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                TextButton.icon(
+                                  onPressed: _resetPencarian,
+                                  icon: const Icon(Icons.refresh),
+                                  label: const Text('Reset Pencarian'),
+                                ),
+                              ],
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.only(top: 4, bottom: 80),
+                          itemCount: barangTampil.length,
+                          itemBuilder: (context, i) {
+                            final b = barangTampil[i];
+                            return Card(
+                              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                              child: ListTile(
+                                title: Text(b.nama),
+                                subtitle: Text('${b.kode} • Stok: ${b.stok}'),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      tooltip: 'Edit',
+                                      onPressed: () => _ubah(b),
+                                      icon: const Icon(Icons.edit),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Hapus',
+                                      onPressed: () => _hapus(b),
+                                      icon: const Icon(Icons.delete),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _tambah,
+        child: const Icon(Icons.add),
+      ),
     );
   }
 }
@@ -210,4 +318,3 @@ class _FormBarangPageState extends State<FormBarangPage> {
     ),
   );
 }
-
