@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// Panggil file export terpisah buatan Anda
+import 'export_helper.dart';
+
 void main() => runApp(const MaterialApp(
   debugShowCheckedModeBanner: false,
   home: InventarisPage(),
@@ -121,20 +124,43 @@ class _InventarisPageState extends State<InventarisPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Inventaris Laboratorium')),
-      body: _loading ? const Center(child: CircularProgressIndicator()) : ListView.builder(
-          itemCount: _barang.length,
-          itemBuilder: (context, i) {
-            final b = _barang[i];
-            return Card(child: ListTile(
-              title: Text(b.nama),
-              subtitle: Text('${b.kode} • Stok: ${b.stok}'),
-              trailing: Row(mainAxisSize: MainAxisSize.min, children: [IconButton(tooltip: 'Edit', onPressed: () => _ubah(b), icon: const Icon(Icons.edit)),
-IconButton(tooltip: 'Hapus', onPressed: () => _hapus(b), icon: const Icon(Icons.delete)),
-]),
-            ));
-          },
-        ),
+      appBar: AppBar(
+        title: const Text('Inventaris Laboratorium'),
+        actions: [
+          // Memanggil fungsi dari ExportHelper yang ada di file terpisah
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf),
+            tooltip: 'Export PDF',
+            onPressed: () => ExportHelper.exportPdf(_barang),
+          ),
+          IconButton(
+            icon: const Icon(Icons.share),
+            tooltip: 'Share Data',
+            onPressed: () => ExportHelper.shareData(_barang),
+          ),
+        ],
+      ),
+      body: _loading 
+        ? const Center(child: CircularProgressIndicator()) 
+        : ListView.builder(
+            itemCount: _barang.length,
+            itemBuilder: (context, i) {
+              final b = _barang[i];
+              return Card(
+                child: ListTile(
+                  title: Text(b.nama),
+                  subtitle: Text('Kode: ${b.kode} | Stok: ${b.stok}'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min, 
+                    children: [
+                      IconButton(tooltip: 'Edit', onPressed: () => _ubah(b), icon: const Icon(Icons.edit)),
+                      IconButton(tooltip: 'Hapus', onPressed: () => _hapus(b), icon: const Icon(Icons.delete)),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
       floatingActionButton: FloatingActionButton(onPressed: _tambah, child: const Icon(Icons.add)),
     );
   }
@@ -210,4 +236,3 @@ class _FormBarangPageState extends State<FormBarangPage> {
     ),
   );
 }
-
