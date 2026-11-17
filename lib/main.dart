@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'database_helper.dart';
 
 void main() => runApp(const MaterialApp(
   debugShowCheckedModeBanner: false,
@@ -12,10 +11,15 @@ class Barang {
   final String nama;
   final int stok;
   const Barang({required this.kode, required this.nama, required this.stok});
+
   Barang copyWith({String? nama, int? stok}) => Barang(
-    kode: kode, nama: nama ?? this.nama, stok: stok ?? this.stok,
+    kode: kode,
+    nama: nama ?? this.nama,
+    stok: stok ?? this.stok,
   );
+
   Map<String, dynamic> toJson() => {'kode': kode, 'nama': nama, 'stok': stok};
+
   factory Barang.fromJson(Map<String, dynamic> j) => Barang(
     kode: j['kode'] as String,
     nama: j['nama'] as String,
@@ -30,14 +34,9 @@ class InventarisPage extends StatefulWidget {
 }
 
 class _InventarisPageState extends State<InventarisPage> {
-  final List<Barang> _barang = [
-    const Barang(kode: 'BRG001', nama: 'Mouse', stok: 5),
-    const Barang(kode: 'BRG002', nama: 'Keyboard', stok: 3),
-  ];
-
+  final List<Barang> _barang = [];
   bool _loading = true;
-  final SharedPreferencesAsync _prefs = SharedPreferencesAsync();
-  static const String _key = 'inventaris_v1';
+  final BarangDb _db = BarangDb();
 
   @override
   void initState() {
@@ -47,64 +46,64 @@ class _InventarisPageState extends State<InventarisPage> {
 
   Future<void> _muat() async {
     try {
-      final saved = await _prefs.getString(_key);
+      final rows = await _db.baca();
       if (!mounted) return;
-      if (saved != null) {
-        final raw = jsonDecode(saved) as List<dynamic>;
-        setState(() {
-          _barang
-            ..clear()
-            ..addAll(raw.map((e) => Barang.fromJson(e as Map<String, dynamic>)));
-        });
-      }
+      setState(() {
+        _barang
+          ..clear()
+          ..addAll(rows.map((e) => Barang.fromJson(Map<String, dynamic>.from(e))));
+      });
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal memuat data: $e')),
-      );
+      if (mounted) {
+        _pesan('Gagal memuat data: $e');
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _simpan() async {
-    final data = jsonEncode(_barang.map((e) => e.toJson()).toList());
-    try {
-      await _prefs.setString(_key, data);
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal menyimpan data: $e')),
-      );
-    }
-  }
-
   Future<void> _tambah() async {
-    final baru = await Navigator.push<Barang>(context,
-      MaterialPageRoute(builder: (_) => const FormBarangPage()));
+    final baru = await Navigator.push<Barang>(
+      context,
+      MaterialPageRoute(builder: (_) => const FormBarangPage()),
+    );
     if (!mounted || baru == null) return;
+
     if (_barang.any((item) => item.kode.toLowerCase() == baru.kode.toLowerCase())) {
       _pesan('Kode barang sudah digunakan');
       return;
     }
-    setState(() => _barang.add(baru));
-    await _simpan();
+
+    try {
+      await _db.tambah(baru.kode, baru.nama, baru.stok);
+      await _muat();
+    } catch (e) {
+      if (mounted) _pesan('Gagal menambah barang: $e');
+    }
   }
 
   void _pesan(String pesan) => ScaffoldMessenger.of(context)
       .showSnackBar(SnackBar(content: Text(pesan)));
 
   Future<void> _ubah(Barang asal) async {
-    final hasil = await Navigator.push<Barang>(context,
-      MaterialPageRoute(builder: (_) => FormBarangPage(barang: asal)));
+    final hasil = await Navigator.push<Barang>(
+      context,
+      MaterialPageRoute(builder: (_) => FormBarangPage(barang: asal)),
+    );
     if (!mounted || hasil == null) return;
-    final index = _barang.indexWhere((item) => item.kode == asal.kode);
-    if (index < 0) return;
-    setState(() => _barang[index] = hasil);
-    await _simpan();
+
+    try {
+      await _db.ubah(asal.kode, hasil.nama, hasil.stok);
+      await _muat();
+    } catch (e) {
+      if (mounted) _pesan('Gagal mengubah barang: $e');
+    }
   }
 
   Future<void> _hapus(Barang barang) async {
-    final setuju = await showDialog<bool>(context: context, builder: (ctx) =>
-      AlertDialog(
+    final setuju = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
         title: const Text('Hapus barang?'),
         content: Text('Hapus ${barang.nama} (${barang.kode})?'),
         actions: [
@@ -114,28 +113,54 @@ class _InventarisPageState extends State<InventarisPage> {
       ),
     );
     if (!mounted || setuju != true) return;
-    setState(() => _barang.removeWhere((item) => item.kode == barang.kode));
-    await _simpan();
+
+    try {
+      await _db.hapus(barang.kode);
+      await _muat();
+    } catch (e) {
+      if (mounted) _pesan('Gagal menghapus barang: $e');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Inventaris Laboratorium')),
-      body: _loading ? const Center(child: CircularProgressIndicator()) : ListView.builder(
-          itemCount: _barang.length,
-          itemBuilder: (context, i) {
-            final b = _barang[i];
-            return Card(child: ListTile(
-              title: Text(b.nama),
-              subtitle: Text('${b.kode} • Stok: ${b.stok}'),
-              trailing: Row(mainAxisSize: MainAxisSize.min, children: [IconButton(tooltip: 'Edit', onPressed: () => _ubah(b), icon: const Icon(Icons.edit)),
-IconButton(tooltip: 'Hapus', onPressed: () => _hapus(b), icon: const Icon(Icons.delete)),
-]),
-            ));
-          },
-        ),
-      floatingActionButton: FloatingActionButton(onPressed: _tambah, child: const Icon(Icons.add)),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _barang.isEmpty
+              ? const Center(child: Text('Belum ada data barang. Tekan + untuk menambah.'))
+              : ListView.builder(
+                  itemCount: _barang.length,
+                  itemBuilder: (context, i) {
+                    final b = _barang[i];
+                    return Card(
+                      child: ListTile(
+                        title: Text(b.nama),
+                        subtitle: Text('${b.kode} • Stok: ${b.stok}'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: 'Edit',
+                              onPressed: () => _ubah(b),
+                              icon: const Icon(Icons.edit),
+                            ),
+                            IconButton(
+                              tooltip: 'Hapus',
+                              onPressed: () => _hapus(b),
+                              icon: const Icon(Icons.delete),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _tambah,
+        child: const Icon(Icons.add),
+      ),
     );
   }
 }
@@ -174,40 +199,48 @@ class _FormBarangPageState extends State<FormBarangPage> {
     appBar: AppBar(title: Text(widget.barang == null ? 'Tambah Barang' : 'Ubah Barang')),
     body: Form(
       key: _form,
-      child: ListView(padding: const EdgeInsets.all(16), children: [
-        TextFormField(
-          controller: _kode,
-          readOnly: widget.barang != null,
-          decoration: const InputDecoration(labelText: 'Kode barang'),
-          validator: (v) => (v == null || v.trim().isEmpty) ? 'Kode wajib diisi' : null,
-        ),
-        TextFormField(
-          controller: _nama,
-          decoration: const InputDecoration(labelText: 'Nama barang'),
-          validator: (v) => (v == null || v.trim().isEmpty) ? 'Nama wajib diisi' : null,
-        ),
-        TextFormField(
-          controller: _stok,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Stok'),
-          validator: (v) {
-            final n = int.tryParse(v?.trim() ?? '');
-            if (n == null) return 'Stok harus angka bulat';
-            if (n < 0) return 'Stok tidak boleh negatif';
-            return null;
-          },
-        ),
-        const SizedBox(height: 16),
-        ElevatedButton(onPressed: () {
-          if (!_form.currentState!.validate()) return;
-          Navigator.pop(context, Barang(
-            kode: _kode.text.trim(),
-            nama: _nama.text.trim(),
-            stok: int.parse(_stok.text.trim()),
-          ));
-        }, child: const Text('Simpan')),
-      ]),
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          TextFormField(
+            controller: _kode,
+            readOnly: widget.barang != null,
+            decoration: const InputDecoration(labelText: 'Kode barang'),
+            validator: (v) => (v == null || v.trim().isEmpty) ? 'Kode wajib diisi' : null,
+          ),
+          TextFormField(
+            controller: _nama,
+            decoration: const InputDecoration(labelText: 'Nama barang'),
+            validator: (v) => (v == null || v.trim().isEmpty) ? 'Nama wajib diisi' : null,
+          ),
+          TextFormField(
+            controller: _stok,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'Stok'),
+            validator: (v) {
+              final n = int.tryParse(v?.trim() ?? '');
+              if (n == null) return 'Stok harus angka bulat';
+              if (n < 0) return 'Stok tidak boleh negatif';
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () {
+              if (!_form.currentState!.validate()) return;
+              Navigator.pop(
+                context,
+                Barang(
+                  kode: _kode.text.trim(),
+                  nama: _nama.text.trim(),
+                  stok: int.parse(_stok.text.trim()),
+                ),
+              );
+            },
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
     ),
   );
 }
-
