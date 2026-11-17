@@ -1,11 +1,52 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dashboard_page.dart';
 
 void main() => runApp(const MaterialApp(
   debugShowCheckedModeBanner: false,
-  home: InventarisPage(),
+  home: HomeShell(),
 ));
+
+// ===== TAMBAHAN ANGGOTA 7: kerangka navigasi Beranda + Inventaris =====
+class HomeShell extends StatefulWidget {
+  const HomeShell({super.key});
+  @override
+  State<HomeShell> createState() => _HomeShellState();
+}
+
+class _HomeShellState extends State<HomeShell> {
+  int _tab = 0;
+  final ValueNotifier<List<Barang>> _daftar = ValueNotifier([]);
+
+  @override
+  void dispose() {
+    _daftar.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(index: _tab, children: [
+        DashboardPage(
+          daftar: _daftar,
+          onLihatInventaris: () => setState(() => _tab = 1),
+        ),
+        InventarisPage(daftar: _daftar),
+      ]),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tab,
+        onDestinationSelected: (i) => setState(() => _tab = i),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.dashboard), label: 'Beranda'),
+          NavigationDestination(icon: Icon(Icons.inventory_2), label: 'Inventaris'),
+        ],
+      ),
+    );
+  }
+}
+// ===== AKHIR TAMBAHAN =====
 
 class Barang {
   final String kode;
@@ -24,7 +65,8 @@ class Barang {
 }
 
 class InventarisPage extends StatefulWidget {
-  const InventarisPage({super.key});
+  final ValueNotifier<List<Barang>>? daftar; // TAMBAHAN
+  const InventarisPage({super.key, this.daftar});
   @override
   State<InventarisPage> createState() => _InventarisPageState();
 }
@@ -62,11 +104,13 @@ class _InventarisPageState extends State<InventarisPage> {
         SnackBar(content: Text('Gagal memuat data: $e')),
       );
     } finally {
+      widget.daftar?.value = List.of(_barang); // TAMBAHAN
       if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _simpan() async {
+    widget.daftar?.value = List.of(_barang); // TAMBAHAN
     final data = jsonEncode(_barang.map((e) => e.toJson()).toList());
     try {
       await _prefs.setString(_key, data);
@@ -129,9 +173,10 @@ class _InventarisPageState extends State<InventarisPage> {
             return Card(child: ListTile(
               title: Text(b.nama),
               subtitle: Text('${b.kode} • Stok: ${b.stok}'),
-              trailing: Row(mainAxisSize: MainAxisSize.min, children: [IconButton(tooltip: 'Edit', onPressed: () => _ubah(b), icon: const Icon(Icons.edit)),
-IconButton(tooltip: 'Hapus', onPressed: () => _hapus(b), icon: const Icon(Icons.delete)),
-]),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                IconButton(tooltip: 'Edit', onPressed: () => _ubah(b), icon: const Icon(Icons.edit)),
+                IconButton(tooltip: 'Hapus', onPressed: () => _hapus(b), icon: const Icon(Icons.delete)),
+              ]),
             ));
           },
         ),
@@ -210,4 +255,3 @@ class _FormBarangPageState extends State<FormBarangPage> {
     ),
   );
 }
-
