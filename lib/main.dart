@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'database_helper.dart';
 import 'dashboard_page.dart';
+import 'export_helper.dart';
 
 void main() {
   runApp(const InventarisApp());
@@ -529,6 +530,17 @@ class _InventarisPageState extends State<InventarisPage> {
           ],
         ),
         actions: [
+          // Fitur Export PDF & Share (Rani)
+          IconButton(
+            tooltip: 'Export PDF',
+            icon: const Icon(Icons.picture_as_pdf_rounded),
+            onPressed: () => ExportHelper.exportPdf(_barang),
+          ),
+          IconButton(
+            tooltip: 'Bagikan Data',
+            icon: const Icon(Icons.share_rounded),
+            onPressed: () => ExportHelper.shareData(_barang),
+          ),
           IconButton(
             tooltip: 'Muat Ulang',
             onPressed: _muat,
