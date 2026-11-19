@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'database_helper.dart';
 
 void main() {
@@ -684,6 +685,7 @@ class _FormBarangPageState extends State<FormBarangPage> {
 
             const SizedBox(height: 25),
 
+            // 1. KODE BARANG: Campuran huruf dan angka
             TextFormField(
               controller: _kode,
               readOnly: isEdit,
@@ -691,9 +693,16 @@ class _FormBarangPageState extends State<FormBarangPage> {
                 labelText: 'Kode Barang',
                 prefixIcon: Icon(Icons.qr_code_rounded),
               ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
+              ],
               validator: (value) {
-                if (value == null || value.trim().isEmpty) {
+                final text = value?.trim() ?? '';
+                if (text.isEmpty) {
                   return 'Kode barang wajib diisi';
+                }
+                if (!RegExp(r'^(?=.*[a-zA-Z])(?=.*[0-9])[a-zA-Z0-9]+$').hasMatch(text)) {
+                  return 'Kode harus campuran huruf dan angka';
                 }
                 return null;
               },
@@ -701,15 +710,23 @@ class _FormBarangPageState extends State<FormBarangPage> {
 
             const SizedBox(height: 17),
 
+            // 2. NAMA BARANG: Huruf saja (beserta spasi)
             TextFormField(
               controller: _nama,
               decoration: const InputDecoration(
                 labelText: 'Nama Barang',
                 prefixIcon: Icon(Icons.inventory_rounded),
               ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
+              ],
               validator: (value) {
-                if (value == null || value.trim().isEmpty) {
+                final text = value?.trim() ?? '';
+                if (text.isEmpty) {
                   return 'Nama barang wajib diisi';
+                }
+                if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(text)) {
+                  return 'Nama barang hanya boleh berisi huruf';
                 }
                 return null;
               },
@@ -717,6 +734,7 @@ class _FormBarangPageState extends State<FormBarangPage> {
 
             const SizedBox(height: 17),
 
+            // 3. STOK: Angka saja
             TextFormField(
               controller: _stok,
               keyboardType: TextInputType.number,
@@ -724,17 +742,21 @@ class _FormBarangPageState extends State<FormBarangPage> {
                 labelText: 'Jumlah Stok',
                 prefixIcon: Icon(Icons.numbers_rounded),
               ),
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+              ],
               validator: (value) {
-                final jumlah = int.tryParse(value?.trim() ?? '');
-
+                final text = value?.trim() ?? '';
+                if (text.isEmpty) {
+                  return 'Stok wajib diisi';
+                }
+                final jumlah = int.tryParse(text);
                 if (jumlah == null) {
                   return 'Stok harus berupa angka bulat';
                 }
-
                 if (jumlah < 0) {
                   return 'Stok tidak boleh negatif';
                 }
-
                 return null;
               },
             ),
