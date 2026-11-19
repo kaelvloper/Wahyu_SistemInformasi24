@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'database_helper.dart';
+import 'dashboard_page.dart';
 
 void main() {
   runApp(const InventarisApp());
@@ -37,7 +38,58 @@ class InventarisApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const InventarisPage(),
+      home: const HomeShell(),
+    );
+  }
+}
+
+// KERANGKA NAVIGASI BERANDA + INVENTARIS (Rana)
+class HomeShell extends StatefulWidget {
+  const HomeShell({super.key});
+
+  @override
+  State<HomeShell> createState() => _HomeShellState();
+}
+
+class _HomeShellState extends State<HomeShell> {
+  int _tab = 0;
+  final ValueNotifier<List<Barang>> _daftar = ValueNotifier([]);
+
+  @override
+  void dispose() {
+    _daftar.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(
+        index: _tab,
+        children: [
+          DashboardPage(
+            daftar: _daftar,
+            onLihatInventaris: () => setState(() => _tab = 1),
+          ),
+          InventarisPage(daftar: _daftar),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tab,
+        onDestinationSelected: (i) => setState(() => _tab = i),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard),
+            label: 'Beranda',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.inventory_2_outlined),
+            selectedIcon: Icon(Icons.inventory_2),
+            label: 'Inventaris',
+          ),
+        ],
+      ),
     );
   }
 }
@@ -86,7 +138,9 @@ class Barang {
 
 // HALAMAN UTAMA INVENTARIS
 class InventarisPage extends StatefulWidget {
-  const InventarisPage({super.key});
+  final ValueNotifier<List<Barang>>? daftar;
+
+  const InventarisPage({super.key, this.daftar});
 
   @override
   State<InventarisPage> createState() => _InventarisPageState();
@@ -135,11 +189,13 @@ class _InventarisPageState extends State<InventarisPage> {
           ..clear()
           ..addAll(rows.map((e) => Barang.fromJson(Map<String, dynamic>.from(e))));
       });
+      widget.daftar?.value = List.of(_barang);
     } catch (e) {
       if (mounted) {
         _pesan('Gagal memuat data: $e');
       }
     } finally {
+      widget.daftar?.value = List.of(_barang);
       if (mounted) {
         setState(() => _loading = false);
       }
