@@ -47,18 +47,21 @@ class Barang {
   final String kode;
   final String nama;
   final int stok;
+  final String kategori;
 
   const Barang({
     required this.kode,
     required this.nama,
     required this.stok,
+    this.kategori = 'Lainnya',
   });
 
-  Barang copyWith({String? nama, int? stok}) {
+  Barang copyWith({String? nama, int? stok, String? kategori}) {
     return Barang(
       kode: kode,
       nama: nama ?? this.nama,
       stok: stok ?? this.stok,
+      kategori: kategori ?? this.kategori,
     );
   }
 
@@ -67,6 +70,7 @@ class Barang {
       'kode': kode,
       'nama': nama,
       'stok': stok,
+      'kategori': kategori,
     };
   }
 
@@ -75,6 +79,7 @@ class Barang {
       kode: json['kode'] as String,
       nama: json['nama'] as String,
       stok: (json['stok'] as num).toInt(),
+      kategori: (json['kategori'] as String?) ?? 'Lainnya',
     );
   }
 }
@@ -98,6 +103,15 @@ class _InventarisPageState extends State<InventarisPage> {
   // Controller dan variabel pencarian (Fitur Pencarian - Reva)
   final TextEditingController _searchController = TextEditingController();
   String _kataKunci = '';
+
+  // Fitur Kategori (Dewo)
+  final List<String> _daftarKategori = [
+    'Aksesoris',
+    'Perangkat Keras',
+    'Jaringan',
+    'Lainnya',
+  ];
+  String _kategoriTerpilih = 'Semua';
 
   @override
   void initState() {
@@ -151,7 +165,7 @@ class _InventarisPageState extends State<InventarisPage> {
     final baru = await Navigator.push<Barang>(
       context,
       MaterialPageRoute(
-        builder: (_) => const FormBarangPage(),
+        builder: (_) => FormBarangPage(daftarKategori: _daftarKategori),
       ),
     );
 
@@ -165,7 +179,7 @@ class _InventarisPageState extends State<InventarisPage> {
     }
 
     try {
-      await _db.tambah(baru.kode, baru.nama, baru.stok);
+      await _db.tambah(baru.kode, baru.nama, baru.stok, baru.kategori);
       await _muat();
       if (mounted) _pesan('Barang berhasil ditambahkan');
     } catch (e) {
@@ -178,14 +192,17 @@ class _InventarisPageState extends State<InventarisPage> {
     final hasil = await Navigator.push<Barang>(
       context,
       MaterialPageRoute(
-        builder: (_) => FormBarangPage(barang: asal),
+        builder: (_) => FormBarangPage(
+          barang: asal,
+          daftarKategori: _daftarKategori,
+        ),
       ),
     );
 
     if (!mounted || hasil == null) return;
 
     try {
-      await _db.ubah(asal.kode, hasil.nama, hasil.stok);
+      await _db.ubah(asal.kode, hasil.nama, hasil.stok, hasil.kategori);
       await _muat();
       if (mounted) _pesan('Barang berhasil diperbarui');
     } catch (e) {
@@ -332,12 +349,35 @@ class _InventarisPageState extends State<InventarisPage> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  'Kode: ${barang.kode}',
-                  style: const TextStyle(
-                    color: Color(0xFF64748B),
-                    fontSize: 12,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      'Kode: ${barang.kode}',
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        barang.kategori,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF475569),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 Container(
@@ -393,18 +433,22 @@ class _InventarisPageState extends State<InventarisPage> {
   // TAMPILAN HALAMAN UTAMA
   @override
   Widget build(BuildContext context) {
+    final filterList = ['Semua', ..._daftarKategori];
+
     final totalStok = _barang.fold<int>(
       0,
       (total, item) => total + item.stok,
     );
 
     final query = _kataKunci.trim().toLowerCase();
-    final hasilPencarian = query.isEmpty
-        ? _barang
-        : _barang.where((barang) {
-            return barang.nama.toLowerCase().contains(query) ||
-                barang.kode.toLowerCase().contains(query);
-          }).toList();
+    final hasilPencarian = _barang.where((barang) {
+      final matchesQuery = query.isEmpty ||
+          barang.nama.toLowerCase().contains(query) ||
+          barang.kode.toLowerCase().contains(query);
+      final matchesKategori = _kategoriTerpilih == 'Semua' ||
+          barang.kategori == _kategoriTerpilih;
+      return matchesQuery && matchesKategori;
+    }).toList();
 
     return Scaffold(
       backgroundColor: background,
@@ -568,8 +612,37 @@ class _InventarisPageState extends State<InventarisPage> {
                   ),
                 ),
 
-                // Indikator jumlah hasil pencarian saat user mengetik
-                if (query.isNotEmpty) ...[
+                const SizedBox(height: 12),
+
+                // FILTER KATEGORI (Fitur Dewo)
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: filterList.map((kat) {
+                      final isSelected = _kategoriTerpilih == kat;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(kat),
+                          selected: isSelected,
+                          selectedColor: const Color(0xFFDBEAFE),
+                          labelStyle: TextStyle(
+                            color: isSelected ? primary : const Color(0xFF64748B),
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          ),
+                          onSelected: (selected) {
+                            setState(() {
+                              _kategoriTerpilih = kat;
+                            });
+                          },
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+
+                // Indikator jumlah hasil pencarian / filter
+                if (query.isNotEmpty || _kategoriTerpilih != 'Semua') ...[
                   const SizedBox(height: 8),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -593,7 +666,7 @@ class _InventarisPageState extends State<InventarisPage> {
                     child: Column(
                       children: [
                         Icon(
-                          query.isNotEmpty
+                          (query.isNotEmpty || _kategoriTerpilih != 'Semua')
                               ? Icons.search_off_rounded
                               : Icons.inventory_2_outlined,
                           size: 60,
@@ -603,7 +676,7 @@ class _InventarisPageState extends State<InventarisPage> {
                         Text(
                           _barang.isEmpty
                               ? 'Belum ada barang'
-                              : 'Barang "$_kataKunci" tidak ditemukan',
+                              : 'Tidak ada barang yang sesuai kriteria',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -613,17 +686,22 @@ class _InventarisPageState extends State<InventarisPage> {
                         Text(
                           _barang.isEmpty
                               ? 'Tekan tombol tambah untuk mulai'
-                              : 'Coba kata kunci pencarian lain',
+                              : 'Coba ubah kata kunci atau pilih kategori lain',
                           style: const TextStyle(
                             color: Colors.grey,
                           ),
                         ),
-                        if (query.isNotEmpty) ...[
+                        if (query.isNotEmpty || _kategoriTerpilih != 'Semua') ...[
                           const SizedBox(height: 12),
                           TextButton.icon(
-                            onPressed: _resetPencarian,
+                            onPressed: () {
+                              _resetPencarian();
+                              setState(() {
+                                _kategoriTerpilih = 'Semua';
+                              });
+                            },
                             icon: const Icon(Icons.refresh_rounded),
-                            label: const Text('Reset Pencarian'),
+                            label: const Text('Reset Filter & Pencarian'),
                           ),
                         ],
                       ],
@@ -654,10 +732,17 @@ class _InventarisPageState extends State<InventarisPage> {
 // HALAMAN FORM TAMBAH DAN EDIT BARANG
 class FormBarangPage extends StatefulWidget {
   final Barang? barang;
+  final List<String> daftarKategori;
 
   const FormBarangPage({
     super.key,
     this.barang,
+    this.daftarKategori = const [
+      'Aksesoris',
+      'Perangkat Keras',
+      'Jaringan',
+      'Lainnya',
+    ],
   });
 
   @override
@@ -670,6 +755,7 @@ class _FormBarangPageState extends State<FormBarangPage> {
   late final TextEditingController _kode;
   late final TextEditingController _nama;
   late final TextEditingController _stok;
+  late String _kategoriPilihan;
 
   @override
   void initState() {
@@ -686,6 +772,11 @@ class _FormBarangPageState extends State<FormBarangPage> {
     _stok = TextEditingController(
       text: widget.barang?.stok.toString() ?? '',
     );
+
+    _kategoriPilihan = widget.barang?.kategori ??
+        (widget.daftarKategori.isNotEmpty
+            ? widget.daftarKategori.first
+            : 'Lainnya');
   }
 
   @override
@@ -734,7 +825,7 @@ class _FormBarangPageState extends State<FormBarangPage> {
 
             const SizedBox(height: 25),
 
-            // 1. KODE BARANG: Campuran huruf dan angka
+            // 1. KODE BARANG: Campuran huruf dan angka (Defni)
             TextFormField(
               controller: _kode,
               readOnly: isEdit,
@@ -759,7 +850,7 @@ class _FormBarangPageState extends State<FormBarangPage> {
 
             const SizedBox(height: 17),
 
-            // 2. NAMA BARANG: Huruf saja (beserta spasi)
+            // 2. NAMA BARANG: Huruf saja (beserta spasi) (Defni)
             TextFormField(
               controller: _nama,
               decoration: const InputDecoration(
@@ -783,7 +874,7 @@ class _FormBarangPageState extends State<FormBarangPage> {
 
             const SizedBox(height: 17),
 
-            // 3. STOK: Angka saja
+            // 3. STOK: Angka saja (Defni)
             TextFormField(
               controller: _stok,
               keyboardType: TextInputType.number,
@@ -810,6 +901,30 @@ class _FormBarangPageState extends State<FormBarangPage> {
               },
             ),
 
+            const SizedBox(height: 17),
+
+            // 4. KATEGORI: Dropdown (Dewo)
+            DropdownButtonFormField<String>(
+              initialValue: _kategoriPilihan,
+              decoration: const InputDecoration(
+                labelText: 'Kategori Barang',
+                prefixIcon: Icon(Icons.category_rounded),
+              ),
+              items: widget.daftarKategori.map((kat) {
+                return DropdownMenuItem(
+                  value: kat,
+                  child: Text(kat),
+                );
+              }).toList(),
+              onChanged: (val) {
+                if (val != null) {
+                  setState(() {
+                    _kategoriPilihan = val;
+                  });
+                }
+              },
+            ),
+
             const SizedBox(height: 28),
 
             SizedBox(
@@ -826,6 +941,7 @@ class _FormBarangPageState extends State<FormBarangPage> {
                       kode: _kode.text.trim(),
                       nama: _nama.text.trim(),
                       stok: int.parse(_stok.text.trim()),
+                      kategori: _kategoriPilihan,
                     ),
                   );
                 },
