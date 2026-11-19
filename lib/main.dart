@@ -94,12 +94,21 @@ class _InventarisPageState extends State<InventarisPage> {
   final List<Barang> _barang = [];
   bool _loading = true;
   final BarangDb _db = BarangDb();
-  String _pencarian = '';
+
+  // Controller dan variabel pencarian (Fitur Pencarian - Reva)
+  final TextEditingController _searchController = TextEditingController();
+  String _kataKunci = '';
 
   @override
   void initState() {
     super.initState();
     _muat();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   // MEMUAT DATA LOKAL DARI SQLITE
@@ -130,6 +139,11 @@ class _InventarisPageState extends State<InventarisPage> {
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  void _resetPencarian() {
+    _searchController.clear();
+    setState(() => _kataKunci = '');
   }
 
   // TAMBAH BARANG KE SQLITE
@@ -384,12 +398,13 @@ class _InventarisPageState extends State<InventarisPage> {
       (total, item) => total + item.stok,
     );
 
-    final hasilPencarian = _barang.where((barang) {
-      final keyword = _pencarian.toLowerCase();
-
-      return barang.nama.toLowerCase().contains(keyword) ||
-          barang.kode.toLowerCase().contains(keyword);
-    }).toList();
+    final query = _kataKunci.trim().toLowerCase();
+    final hasilPencarian = query.isEmpty
+        ? _barang
+        : _barang.where((barang) {
+            return barang.nama.toLowerCase().contains(query) ||
+                barang.kode.toLowerCase().contains(query);
+          }).toList();
 
     return Scaffold(
       backgroundColor: background,
@@ -519,19 +534,27 @@ class _InventarisPageState extends State<InventarisPage> {
 
                 const SizedBox(height: 17),
 
-                // PENCARIAN BARANG
+                // PENCARIAN BARANG (Fitur Reva)
                 TextField(
+                  controller: _searchController,
                   onChanged: (value) {
                     setState(() {
-                      _pencarian = value;
+                      _kataKunci = value;
                     });
                   },
                   decoration: InputDecoration(
-                    hintText: 'Cari nama atau kode barang...',
+                    hintText: 'Cari nama atau kode perangkat (misal: Mouse, BRG001)...',
                     prefixIcon: const Icon(
                       Icons.search_rounded,
                       color: primary,
                     ),
+                    suffixIcon: _kataKunci.isNotEmpty
+                        ? IconButton(
+                            tooltip: 'Hapus pencarian',
+                            icon: const Icon(Icons.clear_rounded),
+                            onPressed: _resetPencarian,
+                          )
+                        : null,
                     filled: true,
                     fillColor: Colors.white,
                     border: OutlineInputBorder(
@@ -545,6 +568,22 @@ class _InventarisPageState extends State<InventarisPage> {
                   ),
                 ),
 
+                // Indikator jumlah hasil pencarian saat user mengetik
+                if (query.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Text(
+                      'Menampilkan ${hasilPencarian.length} dari ${_barang.length} barang',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+
                 const SizedBox(height: 20),
 
                 // DAFTAR BARANG
@@ -553,8 +592,10 @@ class _InventarisPageState extends State<InventarisPage> {
                     padding: const EdgeInsets.all(35),
                     child: Column(
                       children: [
-                        const Icon(
-                          Icons.inventory_2_outlined,
+                        Icon(
+                          query.isNotEmpty
+                              ? Icons.search_off_rounded
+                              : Icons.inventory_2_outlined,
                           size: 60,
                           color: Colors.grey,
                         ),
@@ -562,7 +603,7 @@ class _InventarisPageState extends State<InventarisPage> {
                         Text(
                           _barang.isEmpty
                               ? 'Belum ada barang'
-                              : 'Barang tidak ditemukan',
+                              : 'Barang "$_kataKunci" tidak ditemukan',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -577,6 +618,14 @@ class _InventarisPageState extends State<InventarisPage> {
                             color: Colors.grey,
                           ),
                         ),
+                        if (query.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          TextButton.icon(
+                            onPressed: _resetPencarian,
+                            icon: const Icon(Icons.refresh_rounded),
+                            label: const Text('Reset Pencarian'),
+                          ),
+                        ],
                       ],
                     ),
                   )
